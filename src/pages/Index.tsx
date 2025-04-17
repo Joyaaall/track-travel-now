@@ -1,9 +1,10 @@
+
 import { useEffect, useState } from "react";
 import SearchBar from "@/components/SearchBar";
 import BusMap from "@/components/BusMap";
 import BusList from "@/components/BusList";
 import ErrorBoundary from "@/components/ErrorBoundary";
-import { Bus, BusStop, getNearbyBusStops, getUserLocation, fetchBusRoutes, Depot } from "@/utils/api";
+import { Bus, BusStop, getNearbyBusStops, getUserLocation, fetchBusRoutes, Depot, calculateDistance } from "@/utils/api";
 import { MapPin, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { findNearestDepot } from "@/utils/api";

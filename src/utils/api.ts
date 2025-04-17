@@ -1,3 +1,4 @@
+
 // Types for bus stop and bus data
 export interface BusStop {
   id: string;
@@ -15,6 +16,18 @@ export interface Bus {
   arrival: string;
   stops: string[];
   stopLocations?: Array<{lat: number, lng: number}>;
+}
+
+// Define the Depot interface for KSRTC depots
+export interface Depot {
+  id: string;
+  name: string;
+  type: string;
+  address: string;
+  facilities: string[];
+  lat: number;
+  lng: number;
+  distance?: number;
 }
 
 // Sample data for when APIs aren't available
@@ -203,7 +216,7 @@ export const findNearestDepot = async (lat: number, lng: number): Promise<Depot 
 };
 
 // Utility function to calculate distance between coordinates (Haversine formula)
-const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
   const R = 6371; // Radius of the Earth in km
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);

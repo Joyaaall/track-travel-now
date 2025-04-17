@@ -1,5 +1,5 @@
 
-import { Depot } from "@/utils/api";
+import { Depot, calculateDistance } from "@/utils/api";
 import { Building, Navigation } from "lucide-react";
 
 interface DepotPanelProps {
