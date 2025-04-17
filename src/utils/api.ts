@@ -127,7 +127,7 @@ const withRetry = async <T>(
 export const getNearbyBusStops = async (
   lat: number,
   lng: number,
-  radius = 50000
+  radius = 10000
 ): Promise<BusStop[]> => {
   const cacheKey = `bus_stops_${lat.toFixed(4)}_${lng.toFixed(4)}_${radius}`;
   const cached = getCache(cacheKey);
