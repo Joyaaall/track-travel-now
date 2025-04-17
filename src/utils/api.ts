@@ -4,6 +4,7 @@ export interface BusStop {
   name: string;
   lat: number;
   lng: number;
+  distance?: number;
 }
 
 export interface Bus {
@@ -175,16 +176,17 @@ export const getUserLocation = (): Promise<[number, number]> => {
 };
 
 // Retry function for API calls
-const withRetry = async <T>(fn: () => Promise<T>, attempts = 3): Promise<T> => {
+const withRetry = async <T>(fn: () => Promise<T>, attempts = 3, delay = 500): Promise<T> => {
   try {
     return await fn();
   } catch (error) {
     if (attempts <= 1) throw error;
-    return withRetry(fn, attempts - 1);
+    await new Promise(res => setTimeout(res, delay));
+    return withRetry(fn, attempts - 1, delay);
   }
 };
 
-// Sample depot data (since we can't make real API calls)
+// Sample depot data
 export const sampleDepots: Depot[] = [
   {
     id: "depot_1",
@@ -206,7 +208,7 @@ export const sampleDepots: Depot[] = [
   }
 ];
 
-// Function to get nearby bus stops with real API call
+// Function to get nearby bus stops (strictly 30 nearest)
 export const getNearbyBusStops = async (
   lat: number, 
   lng: number, 
@@ -214,7 +216,7 @@ export const getNearbyBusStops = async (
 ): Promise<BusStop[]> => {
   const cacheKey = `bus_stops_${lat.toFixed(4)}_${lng.toFixed(4)}_${radius}`;
   const cached = getCache(cacheKey);
-  if (cached) return cached;
+  if (cached) return cached.slice(0, 30); // Ensure cached data respects limit
   
   try {
     const query = `
@@ -223,7 +225,7 @@ export const getNearbyBusStops = async (
         node["highway"="bus_stop"](around:${radius},${lat},${lng});
         way["highway"="bus_stop"](around:${radius},${lat},${lng});
       );
-      out body;
+      out body ${30}; // Hard limit in Overpass query
     `;
     
     const response = await withRetry(() => 
@@ -237,24 +239,44 @@ export const getNearbyBusStops = async (
     );
     
     if (!response.ok) throw new Error(ERROR_MESSAGES.overpass_fail);
-    const data = await response.json();
-    const stops = processOverpassData(data);
     
-    // Cache successful results
+    const data = await response.json();
+    let stops = processOverpassData(data)
+      .map(stop => ({
+        ...stop,
+        distance: calculateDistance(lat, lng, stop.lat, stop.lng)
+      }))
+      .sort((a, b) => a.distance! - b.distance!)
+      .slice(0, 30); // Redundant safety limit
+    
+    // Enhance stop names
+    stops = stops.map((stop, index) => ({
+      ...stop,
+      name: stop.name || `Bus Stop ${index + 1}`
+    }));
+    
     setCache(cacheKey, stops);
     return stops;
+    
   } catch (error) {
     console.error("Error fetching nearby bus stops:", error);
     
-    // Fallback to sample data
-    return sampleBusStops.filter(stop => {
-      const distance = calculateDistance(lat, lng, stop.lat, stop.lng);
-      return distance <= radius / 1000; // Convert meters to km
-    });
+    // Fallback to sample data with same constraints
+    return sampleBusStops
+      .map(stop => ({
+        ...stop,
+        distance: calculateDistance(lat, lng, stop.lat, stop.lng)
+      }))
+      .sort((a, b) => a.distance! - b.distance!)
+      .slice(0, 30)
+      .map((stop, index) => ({
+        ...stop,
+        name: stop.name || `Bus Stop ${index + 1}`
+      }));
   }
 };
 
-// Function to fetch bus routes with real API call
+// Function to fetch bus routes
 export const fetchBusRoutes = async (
   from: string, 
   to: string
@@ -284,7 +306,6 @@ export const fetchBusRoutes = async (
     const data = await response.json();
     const buses = processKBusesData(data);
     
-    // Cache successful results
     setCache(cacheKey, buses);
     return buses;
   } catch (error) {
@@ -298,7 +319,6 @@ export const fetchBusRoutes = async (
     });
     
     if (matchingBuses.length === 0) {
-      // If no exact matches, return buses that include these stops
       return sampleBusData.filter(bus => {
         const stops = bus.stops.map(stop => stop.toLowerCase());
         const fromInStops = stops.includes(from.toLowerCase());
@@ -314,7 +334,7 @@ export const fetchBusRoutes = async (
   }
 };
 
-// Function to find the nearest depot with real API call
+// Function to find the nearest depot with automatic routing
 export const findNearestDepot = async (lat: number, lng: number): Promise<Depot | null> => {
   const cacheKey = `nearest_depot_${lat.toFixed(4)}_${lng.toFixed(4)}`;
   const cached = getCache(cacheKey);
@@ -345,13 +365,12 @@ export const findNearestDepot = async (lat: number, lng: number): Promise<Depot 
     const data = await response.json();
     
     if (data.elements.length === 0) {
-      // If no real depots found, fall back to sample data
       const sortedDepots = sampleDepots
         .map(depot => ({
           ...depot,
           distance: calculateDistance(lat, lng, depot.lat, depot.lng)
         }))
-        .sort((a, b) => a.distance - b.distance);
+        .sort((a, b) => a.distance! - b.distance!);
       
       if (sortedDepots.length > 0) {
         setCache(cacheKey, sortedDepots[0]);
@@ -360,7 +379,6 @@ export const findNearestDepot = async (lat: number, lng: number): Promise<Depot 
       return null;
     }
     
-    // Process real depot data
     const depots = data.elements.map((item: any) => ({
       id: item.id.toString(),
       name: item.tags.name || 'KSRTC Depot',
@@ -378,7 +396,6 @@ export const findNearestDepot = async (lat: number, lng: number): Promise<Depot 
   } catch (error) {
     console.error("Error finding nearest depot:", error);
     
-    // Fall back to sample data
     const sortedDepots = sampleDepots
       .map(depot => ({
         ...depot,
@@ -390,18 +407,18 @@ export const findNearestDepot = async (lat: number, lng: number): Promise<Depot 
   }
 };
 
-// Utility function to calculate distance between coordinates (Haversine formula)
+// Enhanced distance calculation
 export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-  const R = 6371; // Radius of the Earth in km
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) *
-      Math.cos(lat2 * (Math.PI / 180)) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const distance = R * c;
-  return distance;
+  const R = 6371; // Earth radius in km
+  const φ1 = lat1 * Math.PI/180;
+  const φ2 = lat2 * Math.PI/180;
+  const Δφ = (lat2-lat1) * Math.PI/180;
+  const Δλ = (lon2-lon1) * Math.PI/180;
+
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  
+  return parseFloat((R * c).toFixed(3));
 };
