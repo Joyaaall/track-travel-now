@@ -1,4 +1,3 @@
-
 // Types for bus stop and bus data
 export interface BusStop {
   id: string;
@@ -105,11 +104,33 @@ export const getUserLocation = (): Promise<[number, number]> => {
   });
 };
 
+// Sample depot data (since we can't make real API calls)
+export const sampleDepots: Depot[] = [
+  {
+    id: "depot_1",
+    name: "KSRTC Ernakulam Depot",
+    type: "main",
+    address: "MG Road, Ernakulam",
+    facilities: ["ticket_counter", "restroom", "canteen"],
+    lat: 9.9816,
+    lng: 76.2999
+  },
+  {
+    id: "depot_2",
+    name: "KSRTC Thrissur Depot",
+    type: "main",
+    address: "Thrissur Bus Stand",
+    facilities: ["ticket_counter", "restroom"],
+    lat: 10.5276,
+    lng: 76.2144
+  }
+];
+
 // Function to get nearby bus stops (mocks the Overpass API call)
 export const getNearbyBusStops = async (
   lat: number, 
   lng: number, 
-  radius: number = 2000
+  radius: number = 50000 // Changed from 2000 to 50000
 ): Promise<BusStop[]> => {
   try {
     // In a real app, this would be an API call to Overpass
@@ -157,6 +178,27 @@ export const fetchBusRoutes = async (
   } catch (error) {
     console.error("Error fetching bus routes:", error);
     return sampleBusData;
+  }
+};
+
+// Function to find the nearest depot
+export const findNearestDepot = async (lat: number, lng: number): Promise<Depot | null> => {
+  try {
+    // In a real app, this would be an Overpass API call
+    // const query = `[out:json];(node["amenity"="bus_station"]["operator"="KSRTC"](around:50000,${lat},${lng}););out body;`;
+    
+    // For now, find the nearest depot from our sample data
+    const sortedDepots = sampleDepots
+      .map(depot => ({
+        ...depot,
+        distance: calculateDistance(lat, lng, depot.lat, depot.lng)
+      }))
+      .sort((a, b) => a.distance - b.distance);
+    
+    return sortedDepots[0] || null;
+  } catch (error) {
+    console.error("Error finding nearest depot:", error);
+    return null;
   }
 };
 

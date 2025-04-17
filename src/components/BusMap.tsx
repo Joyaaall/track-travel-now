@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from "react-leaflet";
 import { BusStop } from "@/utils/api";
@@ -6,7 +5,6 @@ import "leaflet/dist/leaflet.css";
 import { icon } from "leaflet";
 import { Map } from "lucide-react";
 
-// Fix for default marker icon in react-leaflet
 const defaultIcon = icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
@@ -16,7 +14,6 @@ const defaultIcon = icon({
   shadowSize: [41, 41]
 });
 
-// Custom icon for bus stops
 const busStopIcon = icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
@@ -27,7 +24,6 @@ const busStopIcon = icon({
   className: "bus-stop-icon"
 });
 
-// Component that updates the map view when center changes
 const ChangeView = ({ center }: { center: [number, number] }) => {
   const map = useMap();
   useEffect(() => {
@@ -39,17 +35,17 @@ const ChangeView = ({ center }: { center: [number, number] }) => {
 interface BusMapProps {
   center: [number, number];
   busStops: BusStop[];
+  depot?: Depot;
   onBusStopClick?: (busStop: BusStop) => void;
 }
 
-const BusMap = ({ center, busStops, onBusStopClick }: BusMapProps) => {
+const BusMap = ({ center, busStops, depot, onBusStopClick }: BusMapProps) => {
   const [mapLoaded, setMapLoaded] = useState(false);
 
   useEffect(() => {
     setMapLoaded(true);
   }, []);
 
-  // Set attribution for OSM
   const attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
   
   if (!mapLoaded) {
@@ -67,7 +63,7 @@ const BusMap = ({ center, busStops, onBusStopClick }: BusMapProps) => {
     <div className="w-full h-full relative">
       <MapContainer
         center={center}
-        zoom={15}
+        zoom={11}
         className="h-full w-full"
         zoomControl={false}
       >
@@ -78,7 +74,6 @@ const BusMap = ({ center, busStops, onBusStopClick }: BusMapProps) => {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         
-        {/* User location marker */}
         <Marker position={center} icon={defaultIcon}>
           <Popup>
             <div className="text-center">
@@ -90,14 +85,12 @@ const BusMap = ({ center, busStops, onBusStopClick }: BusMapProps) => {
           </Popup>
         </Marker>
         
-        {/* 2km radius circle around user */}
         <Circle
           center={center}
-          radius={2000}
+          radius={50000}
           pathOptions={{ fillColor: '#0EA5E9', fillOpacity: 0.1, weight: 1, color: '#0EA5E9' }}
         />
         
-        {/* Bus stop markers */}
         {busStops.map((stop) => (
           <Marker
             key={stop.id}
@@ -114,6 +107,25 @@ const BusMap = ({ center, busStops, onBusStopClick }: BusMapProps) => {
             </Popup>
           </Marker>
         ))}
+
+        {depot && (
+          <Marker
+            position={[depot.lat, depot.lng]}
+            icon={icon({
+              iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+              iconSize: [25, 41],
+              iconAnchor: [12, 41],
+              className: "depot-marker"
+            })}
+          >
+            <Popup>
+              <div className="text-center">
+                <strong>{depot.name}</strong>
+                <div className="text-xs text-ontrack-gray">{depot.address}</div>
+              </div>
+            </Popup>
+          </Marker>
+        )}
       </MapContainer>
     </div>
   );

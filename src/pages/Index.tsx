@@ -1,18 +1,20 @@
-
 import { useEffect, useState } from "react";
 import SearchBar from "@/components/SearchBar";
 import BusMap from "@/components/BusMap";
 import BusList from "@/components/BusList";
 import ErrorBoundary from "@/components/ErrorBoundary";
-import { Bus, BusStop, getNearbyBusStops, getUserLocation, fetchBusRoutes } from "@/utils/api";
+import { Bus, BusStop, getNearbyBusStops, getUserLocation, fetchBusRoutes, Depot } from "@/utils/api";
 import { MapPin, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { findNearestDepot } from "@/utils/api";
+import DepotPanel from "@/components/DepotPanel";
 
 const Index = () => {
   const [userLocation, setUserLocation] = useState<[number, number]>([10.0261, 76.3125]); // Default: Kerala
   const [busStops, setBusStops] = useState<BusStop[]>([]);
   const [buses, setBuses] = useState<Bus[]>([]);
   const [selectedBus, setSelectedBus] = useState<Bus | null>(null);
+  const [selectedDepot, setSelectedDepot] = useState<Depot | null>(null);
   const [loading, setLoading] = useState({
     location: true,
     busStops: false,
@@ -21,7 +23,6 @@ const Index = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchPerformed, setSearchPerformed] = useState(false);
 
-  // Get user's location on component mount
   useEffect(() => {
     const fetchLocation = async () => {
       try {
@@ -41,7 +42,6 @@ const Index = () => {
     fetchLocation();
   }, []);
 
-  // Fetch nearby bus stops based on location
   const fetchNearbyBusStops = async (location: [number, number]) => {
     setLoading(prev => ({ ...prev, busStops: true }));
     try {
@@ -60,7 +60,6 @@ const Index = () => {
     }
   };
 
-  // Handle search action
   const handleSearch = async (from: string, to: string) => {
     setLoading(prev => ({ ...prev, buses: true }));
     setSearchPerformed(true);
@@ -85,7 +84,6 @@ const Index = () => {
     }
   };
 
-  // Handle bus stop click on map
   const handleBusStopClick = (busStop: BusStop) => {
     toast(`${busStop.name}`, {
       description: "Click for more information",
@@ -96,15 +94,30 @@ const Index = () => {
     });
   };
 
-  // Handle view route button click
-  const handleViewRoute = (bus: Bus) => {
+  const handleViewRoute = async (bus: Bus) => {
     setSelectedBus(bus === selectedBus ? null : bus);
+    
+    if (bus !== selectedBus) {
+      try {
+        const firstStop = busStops.find(stop => stop.name === bus.stops[0]);
+        if (firstStop) {
+          const depot = await findNearestDepot(firstStop.lat, firstStop.lng);
+          if (depot) {
+            setSelectedDepot(depot);
+          }
+        }
+      } catch (error) {
+        console.error("Error finding depot:", error);
+        toast.error("Could not find nearest depot");
+      }
+    } else {
+      setSelectedDepot(null);
+    }
   };
 
   return (
     <ErrorBoundary>
       <div className="flex flex-col h-screen">
-        {/* Header */}
         <header className="px-4 py-2 bg-white border-b border-gray-200">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
@@ -123,21 +136,18 @@ const Index = () => {
           </div>
         </header>
         
-        {/* Search Bar */}
         <SearchBar onSearch={handleSearch} />
         
-        {/* Main Content */}
         <main className="flex-1 flex flex-col md:flex-row overflow-hidden">
-          {/* Map Section */}
           <div className={`${selectedBus ? 'h-1/3' : 'h-1/2'} md:h-auto md:w-1/2 lg:w-3/5`}>
             <BusMap
               center={userLocation}
               busStops={busStops}
+              depot={selectedDepot}
               onBusStopClick={handleBusStopClick}
             />
           </div>
           
-          {/* Bus List Section */}
           <div className={`${selectedBus ? 'h-2/3' : 'h-1/2'} md:h-auto md:w-1/2 lg:w-2/5 bg-ontrack-gray-light overflow-hidden`}>
             {!searchPerformed && !loading.buses ? (
               <div className="flex flex-col items-center justify-center h-full p-4 text-center text-ontrack-gray">
@@ -148,16 +158,27 @@ const Index = () => {
                 </p>
               </div>
             ) : (
-              <BusList
-                buses={buses}
-                loading={loading.buses}
-                onViewRoute={handleViewRoute}
-              />
+              <div className="h-full flex flex-col">
+                <BusList
+                  buses={buses}
+                  loading={loading.buses}
+                  onViewRoute={handleViewRoute}
+                />
+                
+                {selectedDepot && (
+                  <div className="p-4 border-t border-gray-200">
+                    <DepotPanel
+                      depot={selectedDepot}
+                      distance={calculateDistance(userLocation[0], userLocation[1], selectedDepot.lat, selectedDepot.lng)}
+                      onClose={() => setSelectedDepot(null)}
+                    />
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </main>
         
-        {/* Selected Bus Details */}
         {selectedBus && (
           <div className="fixed bottom-0 left-0 right-0 bg-white p-4 shadow-lg rounded-t-xl animate-fade-in transform transition-transform duration-300 z-20">
             <h3 className="font-bold text-lg">{selectedBus.from} → {selectedBus.to}</h3>
