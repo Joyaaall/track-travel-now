@@ -5,14 +5,14 @@ import BusList from "@/components/BusList";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import APIStatusFooter from "@/components/APIStatusFooter";
 import { Bus, BusStop, getNearbyBusStops, getUserLocation, fetchBusRoutes, Depot, calculateDistance, ERROR_MESSAGES } from "@/utils/api";
-import { MapPin, AlertCircle, RefreshCw } from "lucide-react";
+import { MapPin, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { findNearestDepot } from "@/utils/api";
 import DepotPanel from "@/components/DepotPanel";
 import { useAPIStatus } from "@/utils/apiStatus";
 
 const Index = () => {
-  const [userLocation, setUserLocation] = useState<[number, number]>([10.0261, 76.3125]); // Default: Kerala
+  const [userLocation, setUserLocation] = useState<[number, number]>([10.0261, 76.3125]);
   const [busStops, setBusStops] = useState<BusStop[]>([]);
   const [buses, setBuses] = useState<Bus[]>([]);
   const [selectedBus, setSelectedBus] = useState<Bus | null>(null);
@@ -25,11 +25,7 @@ const Index = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchPerformed, setSearchPerformed] = useState(false);
   
-  const { 
-    setOverpassStatus, 
-    setKBusesStatus, 
-    incrementRequestCount 
-  } = useAPIStatus();
+  const { setOverpassStatus, setKBusesStatus, incrementRequestCount } = useAPIStatus();
 
   useEffect(() => {
     const fetchLocation = async () => {
@@ -238,10 +234,7 @@ const Index = () => {
               <div className="text-sm font-medium">Route:</div>
               <div className="flex overflow-x-auto pt-2 pb-1 gap-2">
                 {selectedBus.stops.map((stop, index) => (
-                  <div 
-                    key={index} 
-                    className="flex items-center flex-shrink-0"
-                  >
+                  <div key={index} className="flex items-center flex-shrink-0">
                     <div className="w-2 h-2 bg-ontrack-blue rounded-full"></div>
                     <div className="mx-1 text-xs">{index === 0 || index === selectedBus.stops.length - 1 ? "" : "—"}</div>
                     <div className="text-xs whitespace-nowrap px-2 py-1 bg-ontrack-gray-light rounded-md">
