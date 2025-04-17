@@ -1,27 +1,34 @@
-
 import { Bus } from "@/utils/api";
 import BusCard from "./BusCard";
-import { Bus as BusIcon } from "lucide-react";
+import { Bus as BusIcon, Clock } from "lucide-react";
+import { Skeleton } from "./ui/skeleton";
 
 interface BusListProps {
   buses: Bus[];
   loading?: boolean;
   onViewRoute?: (bus: Bus) => void;
+  lastUpdated?: string;
 }
 
-const BusList = ({ buses, loading = false, onViewRoute }: BusListProps) => {
+const BusList = ({ buses, loading = false, onViewRoute, lastUpdated }: BusListProps) => {
   if (loading) {
     return (
       <div className="p-4 space-y-4">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 animate-pulse">
-            <div className="h-5 bg-gray-200 rounded w-1/4 mb-2"></div>
-            <div className="h-6 bg-gray-200 rounded w-3/4 mb-3"></div>
+          <div key={i} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
             <div className="flex justify-between mb-3">
-              <div className="h-4 bg-gray-200 rounded w-1/3"></div>
-              <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+              <Skeleton className="h-5 w-24" />
+              <Skeleton className="h-5 w-16" />
             </div>
-            <div className="h-8 bg-gray-200 rounded"></div>
+            <Skeleton className="h-6 w-full mb-3" />
+            <div className="flex gap-4 mb-3">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-4 w-20" />
+            </div>
+            <div className="flex gap-2">
+              <Skeleton className="h-8 flex-1" />
+              <Skeleton className="h-8 flex-1" />
+            </div>
           </div>
         ))}
       </div>
@@ -39,14 +46,36 @@ const BusList = ({ buses, loading = false, onViewRoute }: BusListProps) => {
   }
 
   return (
-    <div className="p-4 space-y-2 overflow-y-auto max-h-[calc(100vh-200px)]">
-      <h2 className="font-medium text-lg text-ontrack-gray-dark mb-2">
-        Available Buses ({buses.length})
-      </h2>
+    <div className="p-4 space-y-3 overflow-y-auto max-h-[calc(100vh-200px)]">
+      <div className="flex justify-between items-center mb-2">
+        <h2 className="font-medium text-lg text-ontrack-gray-dark">
+          Available Buses ({buses.length})
+        </h2>
+        {lastUpdated && (
+          <div className="flex items-center text-xs text-ontrack-gray">
+            <Clock className="mr-1 h-3 w-3" />
+            Updated: {lastUpdated}
+          </div>
+        )}
+      </div>
       
-      {buses.map((bus) => (
-        <BusCard key={bus.id} bus={bus} onViewRoute={onViewRoute} />
-      ))}
+      <div className="space-y-3">
+        {buses.map((bus) => (
+          <BusCard 
+            key={`${bus.id}-${bus.departure}`} 
+            bus={bus} 
+            onViewRoute={onViewRoute} 
+          />
+        ))}
+      </div>
+
+      <div className="pt-2 mt-4 text-xs text-ontrack-gray text-center">
+        {buses.some(b => b.fare) ? (
+          <p>Fares shown are approximate and subject to change</p>
+        ) : (
+          <p>Tap "View Route" to see detailed stops</p>
+        )}
+      </div>
     </div>
   );
 };
