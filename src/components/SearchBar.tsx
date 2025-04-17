@@ -1,10 +1,14 @@
-
 import { Search } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import debounce from "lodash.debounce";
 
 interface SearchBarProps {
   onSearch: (from: string, to: string) => void;
+}
+
+interface LocationSuggestion {
+  name: string;
 }
 
 const SearchBar = ({ onSearch }: SearchBarProps) => {
@@ -12,6 +16,7 @@ const SearchBar = ({ onSearch }: SearchBarProps) => {
   const [to, setTo] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [activeInput, setActiveInput] = useState<"from" | "to" | null>(null);
+  const [cachedSuggestions, setCachedSuggestions] = useState<Record<string, string[]>>({});
   
   const mockSuggestions = [
     "Ernakulam",
@@ -26,6 +31,29 @@ const SearchBar = ({ onSearch }: SearchBarProps) => {
     "Malappuram",
   ];
   
+  const debouncedFetchSuggestions = debounce((value: string, type: "from" | "to") => {
+    if (value.length >= 3) {
+      const filtered = mockSuggestions.filter(place => 
+        place.toLowerCase().includes(value.toLowerCase())
+      );
+      
+      setCachedSuggestions(prev => ({
+        ...prev,
+        [value.toLowerCase()]: filtered
+      }));
+      
+      setSuggestions(filtered);
+    } else {
+      setSuggestions([]);
+    }
+  }, 300);
+  
+  useEffect(() => {
+    return () => {
+      debouncedFetchSuggestions.cancel();
+    };
+  }, []);
+  
   const handleInputChange = (
     value: string, 
     type: "from" | "to"
@@ -36,13 +64,11 @@ const SearchBar = ({ onSearch }: SearchBarProps) => {
       setTo(value);
     }
     
-    if (value.length > 1) {
-      const filtered = mockSuggestions.filter(place => 
-        place.toLowerCase().includes(value.toLowerCase())
-      );
-      setSuggestions(filtered);
+    const cachedResult = cachedSuggestions[value.toLowerCase()];
+    if (value.length >= 3 && cachedResult) {
+      setSuggestions(cachedResult);
     } else {
-      setSuggestions([]);
+      debouncedFetchSuggestions(value, type);
     }
   };
   
@@ -95,7 +121,7 @@ const SearchBar = ({ onSearch }: SearchBarProps) => {
           <input
             type="text"
             placeholder="From..."
-            className="search-input"
+            className="search-input w-full px-4 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-ontrack-blue focus:border-transparent"
             value={from}
             onChange={(e) => handleInputChange(e.target.value, "from")}
             onFocus={() => setActiveInput("from")}
@@ -119,7 +145,7 @@ const SearchBar = ({ onSearch }: SearchBarProps) => {
           <input
             type="text"
             placeholder="To..."
-            className="search-input"
+            className="search-input w-full px-4 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-ontrack-blue focus:border-transparent"
             value={to}
             onChange={(e) => handleInputChange(e.target.value, "to")}
             onFocus={() => setActiveInput("to")}
@@ -139,7 +165,7 @@ const SearchBar = ({ onSearch }: SearchBarProps) => {
           )}
         </div>
         
-        <button type="submit" className="search-btn">
+        <button type="submit" className="search-btn bg-ontrack-blue text-white px-4 py-2 rounded-md flex items-center justify-center gap-2 hover:bg-blue-700 transition-colors">
           <Search size={20} />
           <span>Search Buses</span>
         </button>
