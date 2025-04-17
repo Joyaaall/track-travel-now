@@ -1,6 +1,7 @@
 
 import { Search } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 interface SearchBarProps {
   onSearch: (from: string, to: string) => void;
@@ -55,9 +56,33 @@ const SearchBar = ({ onSearch }: SearchBarProps) => {
     setActiveInput(null);
   };
   
+  const validateSearch = (from: string, to: string): boolean => {
+    if (from.length < 3 || to.length < 3) {
+      toast.error("Please enter at least 3 characters for both locations");
+      return false;
+    }
+    
+    if (from.toLowerCase() === to.toLowerCase()) {
+      toast.error("From and To locations cannot be the same");
+      return false;
+    }
+    
+    if (!mockSuggestions.some(place => place.toLowerCase() === from.toLowerCase())) {
+      toast.error("Please select a valid 'From' location from the suggestions");
+      return false;
+    }
+    
+    if (!mockSuggestions.some(place => place.toLowerCase() === to.toLowerCase())) {
+      toast.error("Please select a valid 'To' location from the suggestions");
+      return false;
+    }
+    
+    return true;
+  };
+  
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (from && to) {
+    if (validateSearch(from, to)) {
       onSearch(from, to);
       setSuggestions([]);
     }

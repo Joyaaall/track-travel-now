@@ -1,4 +1,3 @@
-
 // Types for bus stop and bus data
 export interface BusStop {
   id: string;
@@ -179,18 +178,30 @@ export const fetchBusRoutes = async (
     // );
     // const data = await response.json();
     
-    // For now, we'll filter our sample data
+    // Filter our sample data based on from and to locations
     const matchingBuses = sampleBusData.filter(bus => {
-      return (
-        bus.from.toLowerCase() === from.toLowerCase() && 
-        bus.to.toLowerCase() === to.toLowerCase()
-      );
+      const fromMatch = bus.from.toLowerCase() === from.toLowerCase();
+      const toMatch = bus.to.toLowerCase() === to.toLowerCase();
+      return fromMatch && toMatch;
     });
     
-    return matchingBuses.length > 0 ? matchingBuses : sampleBusData;
+    if (matchingBuses.length === 0) {
+      // If no exact matches, return buses that include these stops
+      return sampleBusData.filter(bus => {
+        const stops = bus.stops.map(stop => stop.toLowerCase());
+        const fromInStops = stops.includes(from.toLowerCase());
+        const toInStops = stops.includes(to.toLowerCase());
+        const fromMatchesEndpoint = bus.from.toLowerCase() === from.toLowerCase() || bus.to.toLowerCase() === from.toLowerCase();
+        const toMatchesEndpoint = bus.from.toLowerCase() === to.toLowerCase() || bus.to.toLowerCase() === to.toLowerCase();
+        
+        return (fromInStops || fromMatchesEndpoint) && (toInStops || toMatchesEndpoint);
+      });
+    }
+    
+    return matchingBuses;
   } catch (error) {
     console.error("Error fetching bus routes:", error);
-    return sampleBusData;
+    return [];
   }
 };
 
