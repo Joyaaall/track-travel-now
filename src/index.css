@@ -1,6 +1,61 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer components {
+  .search-input {
+    @apply px-4 py-2 w-full rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-ontrack-blue;
+  }
+  
+  .search-btn {
+    @apply flex items-center justify-center gap-2 bg-ontrack-blue text-white px-6 py-2 rounded-lg hover:bg-ontrack-blue-dark transition-colors;
+  }
+  
+  .bus-card {
+    @apply bg-white p-4 rounded-lg shadow-sm border border-gray-100 transition-all hover:shadow-md;
+  }
+  
+  .bus-header {
+    @apply flex items-center gap-2 mb-2;
+  }
+  
+  .bus-type {
+    @apply text-xs px-2 py-1 rounded-full font-medium;
+  }
+  
+  .ac {
+    @apply bg-busType-ac/20 text-busType-ac;
+  }
+  
+  .express {
+    @apply bg-busType-express/20 text-busType-express;
+  }
+  
+  .ordinary {
+    @apply bg-busType-ordinary/20 text-busType-ordinary;
+  }
+  
+  .alert-btn {
+    @apply mt-2 w-full py-1.5 text-sm rounded-md text-ontrack-blue border border-ontrack-blue hover:bg-ontrack-blue/5 transition-colors;
+  }
+}
+
+html, body {
+  height: 100%;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+#root {
+  height: 100%;
+}
+
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  z-index: 1;
+}
 
 @layer base {
   :root {
