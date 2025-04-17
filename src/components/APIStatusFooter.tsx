@@ -1,6 +1,5 @@
-
 import { useAPIStatus } from "@/utils/apiStatus";
-import { RefreshCw, AlertTriangle, CheckCircle, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle, Loader2 } from "lucide-react";
 
 const APIStatusFooter = () => {
   const { overpassStatus, kbusesStatus, requestsThisMinute } = useAPIStatus();
