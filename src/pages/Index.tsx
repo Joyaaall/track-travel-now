@@ -1,14 +1,15 @@
-
 import { useEffect, useState } from "react";
 import SearchBar from "@/components/SearchBar";
 import BusMap from "@/components/BusMap";
 import BusList from "@/components/BusList";
 import ErrorBoundary from "@/components/ErrorBoundary";
-import { Bus, BusStop, getNearbyBusStops, getUserLocation, fetchBusRoutes, Depot, calculateDistance } from "@/utils/api";
-import { MapPin, AlertCircle } from "lucide-react";
+import APIStatusFooter from "@/components/APIStatusFooter";
+import { Bus, BusStop, getNearbyBusStops, getUserLocation, fetchBusRoutes, Depot, calculateDistance, ERROR_MESSAGES } from "@/utils/api";
+import { MapPin, AlertCircle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { findNearestDepot } from "@/utils/api";
 import DepotPanel from "@/components/DepotPanel";
+import { useAPIStatus } from "@/utils/apiStatus";
 
 const Index = () => {
   const [userLocation, setUserLocation] = useState<[number, number]>([10.0261, 76.3125]); // Default: Kerala
@@ -23,6 +24,12 @@ const Index = () => {
   });
   const [error, setError] = useState<string | null>(null);
   const [searchPerformed, setSearchPerformed] = useState(false);
+  
+  const { 
+    setOverpassStatus, 
+    setKBusesStatus, 
+    incrementRequestCount 
+  } = useAPIStatus();
 
   useEffect(() => {
     const fetchLocation = async () => {
@@ -31,7 +38,7 @@ const Index = () => {
         setUserLocation(location);
         fetchNearbyBusStops(location);
       } catch (err) {
-        setError("Could not access your location. Please enable location services.");
+        setError(ERROR_MESSAGES.location_fail);
         toast.error("Location access denied", {
           description: "Please enable location services for a better experience"
         });
@@ -45,9 +52,19 @@ const Index = () => {
 
   const fetchNearbyBusStops = async (location: [number, number]) => {
     setLoading(prev => ({ ...prev, busStops: true }));
+    setOverpassStatus('loading');
+    
     try {
+      if (!incrementRequestCount()) {
+        toast.warning("Rate limit reached", { 
+          description: "Please wait a moment before trying again" 
+        });
+        throw new Error("Rate limit reached");
+      }
+      
       const stops = await getNearbyBusStops(location[0], location[1]);
       setBusStops(stops);
+      setOverpassStatus('success');
       
       if (stops.length > 0) {
         toast.info(`Found ${stops.length} bus stops nearby`, {
@@ -55,7 +72,15 @@ const Index = () => {
         });
       }
     } catch (err) {
-      setError("Error fetching nearby bus stops. Please try again.");
+      setOverpassStatus('error');
+      setError(ERROR_MESSAGES.overpass_fail);
+      toast.error("Error fetching bus stops", {
+        description: "Using cached data instead",
+        action: {
+          label: "Retry",
+          onClick: () => fetchNearbyBusStops(location)
+        }
+      });
     } finally {
       setLoading(prev => ({ ...prev, busStops: false }));
     }
@@ -65,10 +90,19 @@ const Index = () => {
     setLoading(prev => ({ ...prev, buses: true }));
     setSearchPerformed(true);
     setSelectedBus(null);
+    setKBusesStatus('loading');
     
     try {
+      if (!incrementRequestCount()) {
+        toast.warning("Rate limit reached", { 
+          description: "Please wait a moment before trying again" 
+        });
+        throw new Error("Rate limit reached");
+      }
+      
       const busRoutes = await fetchBusRoutes(from, to);
       setBuses(busRoutes);
+      setKBusesStatus('success');
       
       if (busRoutes.length === 0) {
         toast.warning("No buses found for this route", {
@@ -76,9 +110,14 @@ const Index = () => {
         });
       }
     } catch (err) {
-      setError("Error searching for buses. Please try again.");
+      setKBusesStatus('error');
+      setError(ERROR_MESSAGES.kbuses_fail);
       toast.error("Search failed", {
-        description: "Could not find bus routes. Please try again."
+        description: "Could not find bus routes. Please try again.",
+        action: {
+          label: "Retry",
+          onClick: () => handleSearch(from, to)
+        }
       });
     } finally {
       setLoading(prev => ({ ...prev, buses: false }));
@@ -102,14 +141,22 @@ const Index = () => {
       try {
         const firstStop = busStops.find(stop => stop.name === bus.stops[0]);
         if (firstStop) {
+          setOverpassStatus('loading');
           const depot = await findNearestDepot(firstStop.lat, firstStop.lng);
+          setOverpassStatus('success');
           if (depot) {
             setSelectedDepot(depot);
           }
         }
       } catch (error) {
+        setOverpassStatus('error');
         console.error("Error finding depot:", error);
-        toast.error("Could not find nearest depot");
+        toast.error("Could not find nearest depot", {
+          action: {
+            label: "Retry",
+            onClick: () => handleViewRoute(bus)
+          }
+        });
       }
     } else {
       setSelectedDepot(null);
@@ -131,7 +178,7 @@ const Index = () => {
             {error && (
               <div className="flex items-center text-red-500 text-sm">
                 <AlertCircle size={16} className="mr-1" />
-                <span className="hidden md:inline">Error</span>
+                <span className="hidden md:inline">{error}</span>
               </div>
             )}
           </div>
@@ -213,6 +260,8 @@ const Index = () => {
             </button>
           </div>
         )}
+        
+        <APIStatusFooter />
       </div>
     </ErrorBoundary>
   );

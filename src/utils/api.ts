@@ -29,6 +29,41 @@ export interface Depot {
   distance?: number;
 }
 
+// Error message constants
+export const ERROR_MESSAGES = {
+  overpass_fail: 'Bus stop data unavailable. Using cached data...',
+  kbuses_fail: 'Route information temporarily unavailable',
+  location_fail: 'Enable location services for accurate results',
+  network_fail: 'Network connection required'
+};
+
+// Cache management
+const CACHE_EXPIRY = 60 * 60 * 1000; // 1 hour in ms
+
+const getCache = (key: string) => {
+  const cached = localStorage.getItem(key);
+  if (!cached) return null;
+  
+  try {
+    const { data, timestamp } = JSON.parse(cached);
+    if (Date.now() - timestamp > CACHE_EXPIRY) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return data;
+  } catch (error) {
+    localStorage.removeItem(key);
+    return null;
+  }
+};
+
+const setCache = (key: string, data: any) => {
+  localStorage.setItem(key, JSON.stringify({
+    data,
+    timestamp: Date.now()
+  }));
+};
+
 // Sample data for when APIs aren't available
 export const sampleBusData: Bus[] = [
   {
@@ -95,11 +130,34 @@ export const sampleBusStops: BusStop[] = [
   { id: "stop14", name: "Angamaly Bus Stop", lat: 10.1960, lng: 76.3861 }
 ];
 
+// Process Overpass API response
+const processOverpassData = (data: any): BusStop[] => {
+  return data.elements.map((item: any) => ({
+    id: item.id.toString(),
+    name: item.tags?.name || 'Unnamed Stop',
+    lat: item.lat,
+    lng: item.lon
+  }));
+};
+
+// Process KBuses API response 
+const processKBusesData = (data: any): Bus[] => {
+  return data.map((bus: any) => ({
+    id: bus.id,
+    from: bus.source,
+    to: bus.destination,
+    type: bus.type === 'AC' ? 'AC' : bus.isExpress ? 'Express' : 'Ordinary',
+    departure: bus.departureTime,
+    arrival: bus.arrivalTime,
+    stops: bus.intermediateStops || []
+  }));
+};
+
 // Function to get user's current location
 export const getUserLocation = (): Promise<[number, number]> => {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
-      reject(new Error("Geolocation is not supported by this browser."));
+      reject(new Error(ERROR_MESSAGES.location_fail));
     }
     
     navigator.geolocation.getCurrentPosition(
@@ -114,6 +172,16 @@ export const getUserLocation = (): Promise<[number, number]> => {
       { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
     );
   });
+};
+
+// Retry function for API calls
+const withRetry = async <T>(fn: () => Promise<T>, attempts = 3): Promise<T> => {
+  try {
+    return await fn();
+  } catch (error) {
+    if (attempts <= 1) throw error;
+    return withRetry(fn, attempts - 1);
+  }
 };
 
 // Sample depot data (since we can't make real API calls)
@@ -138,47 +206,91 @@ export const sampleDepots: Depot[] = [
   }
 ];
 
-// Function to get nearby bus stops (mocks the Overpass API call)
+// Function to get nearby bus stops with real API call
 export const getNearbyBusStops = async (
   lat: number, 
   lng: number, 
-  radius: number = 50000 // Changed from 2000 to 50000
+  radius: number = 50000
 ): Promise<BusStop[]> => {
+  const cacheKey = `bus_stops_${lat.toFixed(4)}_${lng.toFixed(4)}_${radius}`;
+  const cached = getCache(cacheKey);
+  if (cached) return cached;
+  
   try {
-    // In a real app, this would be an API call to Overpass
-    // const query = `[out:json];(node["highway"="bus_stop"](around:${radius},${lat},${lng}););out;`;
-    // const response = await fetch('https://overpass-api.de/api/interpreter', {
-    //   method: 'POST',
-    //   body: query
-    // });
-    // const data = await response.json();
+    const query = `
+      [out:json];
+      (
+        node["highway"="bus_stop"](around:${radius},${lat},${lng});
+        way["highway"="bus_stop"](around:${radius},${lat},${lng});
+      );
+      out body;
+    `;
     
-    // For now, we'll filter our sample data based on a simple distance calculation
-    const nearbyStops = sampleBusStops.filter(stop => {
+    const response = await withRetry(() => 
+      fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain'
+        },
+        body: query
+      })
+    );
+    
+    if (!response.ok) throw new Error(ERROR_MESSAGES.overpass_fail);
+    const data = await response.json();
+    const stops = processOverpassData(data);
+    
+    // Cache successful results
+    setCache(cacheKey, stops);
+    return stops;
+  } catch (error) {
+    console.error("Error fetching nearby bus stops:", error);
+    
+    // Fallback to sample data
+    return sampleBusStops.filter(stop => {
       const distance = calculateDistance(lat, lng, stop.lat, stop.lng);
       return distance <= radius / 1000; // Convert meters to km
     });
-    
-    return nearbyStops;
-  } catch (error) {
-    console.error("Error fetching nearby bus stops:", error);
-    return [];
   }
 };
 
-// Function to fetch bus routes (mocks KBuses.in API call)
+// Function to fetch bus routes with real API call
 export const fetchBusRoutes = async (
   from: string, 
   to: string
 ): Promise<Bus[]> => {
+  const sanitizedFrom = encodeURIComponent(from.trim());
+  const sanitizedTo = encodeURIComponent(to.trim());
+  const cacheKey = `bus_routes_${sanitizedFrom}_${sanitizedTo}`;
+  const cached = getCache(cacheKey);
+  if (cached) return cached;
+  
   try {
-    // In a real app, this would be an API call
-    // const response = await fetch(
-    //   `https://www.kbuses.in/v3/Find/source/${from}/destination/${to}/type/all/timing/all`
-    // );
-    // const data = await response.json();
+    const response = await withRetry(() =>
+      fetch(
+        `https://www.kbuses.in/v3/Find/source/${sanitizedFrom}/destination/${sanitizedTo}/type/all/timing/all`,
+        {
+          headers: {
+            'Accept': 'application/json',
+            'Cache-Control': 'no-cache'
+          }
+        }
+      )
+    );
     
-    // Filter our sample data based on from and to locations
+    if (response.status === 404) return [];
+    if (!response.ok) throw new Error(ERROR_MESSAGES.kbuses_fail);
+    
+    const data = await response.json();
+    const buses = processKBusesData(data);
+    
+    // Cache successful results
+    setCache(cacheKey, buses);
+    return buses;
+  } catch (error) {
+    console.error("Error fetching bus routes:", error);
+    
+    // Fallback to sample data
     const matchingBuses = sampleBusData.filter(bus => {
       const fromMatch = bus.from.toLowerCase() === from.toLowerCase();
       const toMatch = bus.to.toLowerCase() === to.toLowerCase();
@@ -199,30 +311,82 @@ export const fetchBusRoutes = async (
     }
     
     return matchingBuses;
-  } catch (error) {
-    console.error("Error fetching bus routes:", error);
-    return [];
   }
 };
 
-// Function to find the nearest depot
+// Function to find the nearest depot with real API call
 export const findNearestDepot = async (lat: number, lng: number): Promise<Depot | null> => {
+  const cacheKey = `nearest_depot_${lat.toFixed(4)}_${lng.toFixed(4)}`;
+  const cached = getCache(cacheKey);
+  if (cached) return cached;
+  
   try {
-    // In a real app, this would be an Overpass API call
-    // const query = `[out:json];(node["amenity"="bus_station"]["operator"="KSRTC"](around:50000,${lat},${lng}););out body;`;
+    const query = `
+      [out:json];
+      (
+        node["amenity"="bus_station"]["operator"="KSRTC"](around:50000,${lat},${lng});
+        node["amenity"="bus_station"]["operator"~"KSRTC",i](around:50000,${lat},${lng});
+      );
+      out body;
+    `;
     
-    // For now, find the nearest depot from our sample data
+    const response = await withRetry(() => 
+      fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain'
+        },
+        body: query
+      })
+    );
+    
+    if (!response.ok) throw new Error('Failed to find depot');
+    
+    const data = await response.json();
+    
+    if (data.elements.length === 0) {
+      // If no real depots found, fall back to sample data
+      const sortedDepots = sampleDepots
+        .map(depot => ({
+          ...depot,
+          distance: calculateDistance(lat, lng, depot.lat, depot.lng)
+        }))
+        .sort((a, b) => a.distance - b.distance);
+      
+      if (sortedDepots.length > 0) {
+        setCache(cacheKey, sortedDepots[0]);
+        return sortedDepots[0];
+      }
+      return null;
+    }
+    
+    // Process real depot data
+    const depots = data.elements.map((item: any) => ({
+      id: item.id.toString(),
+      name: item.tags.name || 'KSRTC Depot',
+      type: item.tags.network || 'main',
+      address: item.tags.address || `${item.lat.toFixed(4)}, ${item.lon.toFixed(4)}`,
+      facilities: [],
+      lat: item.lat,
+      lng: item.lon,
+      distance: calculateDistance(lat, lng, item.lat, item.lon)
+    }));
+    
+    const nearest = depots.sort((a: Depot, b: Depot) => a.distance! - b.distance!)[0];
+    setCache(cacheKey, nearest);
+    return nearest;
+  } catch (error) {
+    console.error("Error finding nearest depot:", error);
+    
+    // Fall back to sample data
     const sortedDepots = sampleDepots
       .map(depot => ({
         ...depot,
         distance: calculateDistance(lat, lng, depot.lat, depot.lng)
       }))
-      .sort((a, b) => a.distance - b.distance);
+      .sort((a, b) => a.distance! - b.distance!);
     
     return sortedDepots[0] || null;
-  } catch (error) {
-    console.error("Error finding nearest depot:", error);
-    return null;
   }
 };
 
